@@ -1,6 +1,6 @@
-(function($) {
-	
+(function($) {	
 	$.entwine('colymba', function($) {
+
 		    
 		$('td.col-bulkSelect').entwine({
 			onmatch: function(){
@@ -29,17 +29,30 @@
 			onunmatch: function(){				
 			},
 			onclick: function(e) {
+				$(this).parents('.ss-gridfield-table').find('input.bulkSelectAll').prop('checked', '');
 			}
 		});
 		
-    $('.toggleSelectAll').entwine({
+    $('input.bulkSelectAll').entwine({
       onmatch: function(){
 			},
 			onunmatch: function(){				
 			},
-      onclick: function(){
+      onclick: function()
+      {
         var state = $(this).prop('checked');
-        $(this).parents('.ss-gridfield-table').find('td.col-bulkSelect input').each(function(){$(this).prop('checked', state);});
+        $(this).parents('.ss-gridfield-table')
+        			 .find('td.col-bulkSelect input')
+        			 .prop('checked', state);
+      },
+      getSelectRecordsID: function()
+      {
+      	return $(this).parents('.ss-gridfield-table')
+				      				.find('td.col-bulkSelect input:checked')
+				      				.map(function() {  
+				      					return parseInt( $(this).data('record') )
+				      				})
+										  .get();
       }
     });
     
@@ -48,165 +61,117 @@
 			},
 			onunmatch: function(){				
 			},
-			onchange: function(e) {
-				var value, btn, icon;
-				value = $(this).val();
-				btn = $(this).parents('.bulkManagerOptions').find('.doBulkActionButton');
-				icon = $(this).parents('.bulkManagerOptions').find('.doBulkActionButton .ui-icon');
-				
-				switch (value) {
-					case 'edit':
-						$(btn).removeClass('ss-ui-action-destructive');
-						$(btn).attr('data-icon', 'pencil');
-						$(icon).removeClass('btn-icon-decline btn-icon-pencil').addClass('btn-icon-pencil');
-						
-						$(btn).attr('href', $(btn).data('url')+'/edit');
-						break;
-						
-					case 'unlink':
-						$(btn).removeClass('ss-ui-action-destructive');
-						$(btn).attr('data-icon', 'chain--minus');
-						$(icon).removeClass('btn-icon-decline btn-icon-pencil').addClass('btn-icon-chain--minus');
-						$(btn).removeAttr('href');
-						break;
-						
-					case 'delete':
-						$(btn).addClass('ss-ui-action-destructive');
-						$(btn).attr('data-icon', 'decline');
-						$(icon).removeClass('btn-icon-decline btn-icon-pencil').addClass('btn-icon-decline');
-						$(btn).removeAttr('href');
-						break;
+			onchange: function(e)
+			{
+        var value   = $(this).val(),
+            $parent = $(this).parents('.bulkManagerOptions'),
+            $btn    = $parent.find('.doBulkActionButton'),
+            config  = $btn.data('config'),
+            $icon   = $parent.find('.doBulkActionButton .ui-icon')
+						;
+
+				$.each( config, function( configKey, configData )
+				{
+					if ( configKey != value )
+					{
+						$icon.removeClass('btn-icon-'+configData['icon']);
+					}
+				});
+				$icon.addClass('btn-icon-'+config[value]['icon']);
+
+
+				if ( config[value]['isDestructive'] )
+				{
+					$btn.addClass('ss-ui-action-destructive');
+				}
+				else{
+					$btn.removeClass('ss-ui-action-destructive');
 				}
 				
 			} 
 		});
 		
-		//@TODO prevent button click to call default url request
 		$('.doBulkActionButton').entwine({
 			onmatch: function(){
 			},
 			onunmatch: function(){				
 			},
-			onmouseover: function(){
-				var action, ids = [];
-				action = $(this).parents('.bulkManagerOptions').find('select.bulkActionName').val();
-				if ( action == 'edit' )
+			getActionURL: function(action, url)
+			{
+				var cacheBuster = new Date().getTime();
+				url = url.split('?');
+
+				if ( action )
 				{
-					$(this).parents('.ss-gridfield-table').find('td.col-bulkSelect input:checked').each(function(){
-						ids.push( parseInt( $(this).attr('name').split('_')[1] ) );
-					});
-					if(ids.length > 0) $(this).attr('href', $(this).data('url')+'/'+action+'?records[]='+ids.join('&records[]=') );
+					action = '/' + action;
 				}
-			},			
-			onclick: function(e) {
-				var action, url, data = {}, ids = [], cacheBuster;
-				action = $(this).parents('.bulkManagerOptions').find('select.bulkActionName').val();
-				
-				if ( action != 'edit' )
-				{				
-					url = $(this).data('url');
-					cacheBuster = new Date().getTime();
-          
-					$(this).parents('.ss-gridfield-table').find('td.col-bulkSelect input:checked').each(function(){
-						ids.push( parseInt( $(this).attr('name').split('_')[1] ) );
-					});				
-					data.records = ids;
+				else{
+					action = '';
+				}
 
-					if ( url.indexOf('?') !== -1 ) cacheBuster = '&cacheBuster=' + cacheBuster;
-					else cacheBuster = '?cacheBuster=' + cacheBuster;
+				if ( url[1] )
+				{
+					url = url[0] + action + '?' + url[1] + '&' + 'cacheBuster=' + cacheBuster;
+				}
+				else{
+					url = url[0] + action + '?' + 'cacheBuster=' + cacheBuster;
+				}
+				return url;
+			},
+			onclick: function(e)
+			{
+				var $parent = $(this).parents('.bulkManagerOptions'),						
+						$btn = $parent.find('a.doBulkActionButton'),
 
+						action = $parent.find('select.bulkActionName').val(),
+						config = $btn.data('config'),
+
+						url = this.getActionURL(action, $(this).data('url')),	
+
+						ids = $(this).parents('.bulkManagerOptions').find('input.bulkSelectAll:first').getSelectRecordsID(),
+						data = { records: ids }
+						;
+						
+
+				if ( ids.length <= 0 )
+				{
+					alert( ss.i18n._t('GridFieldBulkManager.BULKACTION_EMPTY_SELECT') );
+					return;
+				}
+
+				if ( $btn.hasClass('ss-ui-action-destructive') )
+				{
+					if( !confirm(ss.i18n._t('GridFieldBulkManager.CONFIRM_DESTRUCTIVE_ACTION')) )
+					{
+						e.preventDefault();
+						return false;
+					}					
+				}	
+
+				$btn.addClass('loading');				
+
+				if ( config[action]['isAjax'] )
+				{
 					$.ajax({
-						url: url + '/' + action + cacheBuster,
+						url: url,
 						data: data,
 						type: "POST",
 						context: $(this)
 					}).done(function() {
             $(this).parents('.ss-gridfield').entwine('.').entwine('ss').reload();
+            $btn.removeClass('loading');
 					});
+				}
+				else{
+					var records = 'records[]='+ids.join('&records[]=');
+					url = url + '&' + records;
+
+					window.location.href = url;
 				}
 				
 			} 
 		});
 
-		/* **************************************************************************************
-		 * EDITING */
 		
-		$('.bulkEditingFieldHolder').entwine({
-			onmatch: function(){
-				var id, name = 'bulkEditingForm';
-				id = $(this).attr('id').split('_')[3];
-				$(this).wrap('<form name="'+name+'_'+id+'" id="'+name+'_'+id+'" class="'+name+'"/>');
-			},
-			onunmatch: function(){					
-			}
-		});
-
-		$('.bulkEditingForm').entwine({
-			onsubmit: function(){
-				return false;
-			}
-		});
-		
-		$('.bulkEditingForm input, .bulkEditingForm select, .bulkEditingForm textarea').entwine({
-			onchange: function(){
-				var form;
-
-				form = this.parents('form.bulkEditingForm');
-
-				if ( !$(form).hasClass('hasUpdate') ) {
-					$(form).addClass('hasUpdate');
-				}
-			}
-		});		
-		
-		$('#bulkEditingUpdateBtn').entwine({
-				onmatch: function(){
-					$(this).data('completedForms', 0);
-				},
-				onunmatch: function(){					
-				},
-				onclick: function(e){
-					var formsWithUpadtes, url, data, cacheBuster;
-					
-					formsWithUpadtes = $('form.bulkEditingForm.hasUpdate');
-					$(this).data('formsToUpdate', $(formsWithUpadtes).length);
-					url = $(this).data('url');
-					
-					if ( $(formsWithUpadtes).length > 0 ) $(this).addClass('loading');
-														
-					$(formsWithUpadtes).each(function(){
-						cacheBuster = new Date().getTime() + '_' + $(this).attr('name');
-						data = $(this).serialize();
-						
-						if ( url.indexOf('?') !== -1 ) cacheBuster = '&cacheBuster=' + cacheBuster;
-						else cacheBuster = '?cacheBuster=' + cacheBuster;
-
-						$.ajax({
-							url: url + '/' + cacheBuster,
-							data: data,
-							type: "POST",
-							context: $(this)
-						}).done(function() { 
-							
-							var btn = $('#bulkEditingUpdateBtn');
-							var totalForms = parseInt( $(btn).data('formsToUpdate') );				
-							var counter = parseInt( $(btn).data('completedForms') );							
-							counter = counter + 1;							
-							$(btn).data('completedForms', counter);
-							
-							$(this).removeClass('hasUpdate');		
-														
-							if ( counter == totalForms ) {
-								$('#bulkEditingUpdateBtn').data('completedForms', 0);
-								$('#bulkEditingUpdateBtn').removeClass('loading');
-							}
-							
-						});
-					})
-					
-				}
-			});
-		
-	});
-	
+	});	
 }(jQuery));
